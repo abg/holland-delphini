@@ -1,4 +1,14 @@
-"""Utility methods for mysql cluster backups"""
+# coding: utf-8
+"""
+    delphini.util
+    ~~~~~~~~~~~~~~~~~~
+
+    Utility functions to run arbitrary commands either locally or via ssh as
+    running various ndb cluster commands
+
+    :copyright: 2010-2011 by Andrew Garner
+    :license: BSD, see LICENSE.rst for details
+"""
 
 import os
 import re

@@ -1,4 +1,14 @@
-"""MySQL Cluster backups"""
+# coding: utf-8
+"""
+    delphini.plugin
+    ~~~~~~~~~~~~~~~
+
+    Implements a backup plugin for holland 1.0 which is exposed as
+    holland.backup entrypoint in the delphini package.
+
+    :copyright: 2010-2011 by Andrew Garner
+    :license: BSD, see LICENSE.rst for details
+"""
 
 import os
 import logging

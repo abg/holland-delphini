@@ -1,5 +1,13 @@
+# coding: utf-8
+"""
+    delphini.backend
+    ~~~~~~~~~~~~~~~~
 
-"""Utility methods for mysql cluster backups"""
+    Delphini backend API for generating MySQL cluster backups
+
+    :copyright: 2010-2011 by Andrew Garner
+    :license: BSD, see LICENSE.rst for details
+"""
 
 import os
 import logging

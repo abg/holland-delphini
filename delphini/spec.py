@@ -1,4 +1,15 @@
-"""Config specification for mysql cluster backups"""
+# coding: utf-8
+"""
+    delphini.spec
+    ~~~~~~~~~~~~~
+
+    Defines the configspec for the delphini backup plugin. This is used by
+    Holland to generate new config files and to validate configs passed to this
+    plugin.
+
+    :copyright: 2010-2011 by Andrew Garner
+    :license: BSD, see LICENSE.rst for details
+"""
 
 CONFIGSPEC = """
 [mysql-cluster]

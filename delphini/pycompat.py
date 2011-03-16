@@ -1,10 +1,23 @@
-"""Backports of useful python utilities for python2.4+"""
+# coding: utf-8
+"""
+    delphini.pycompat
+    ~~~~~~~~~~~~~~~~~
+
+    Implements :func:`namedtuple` for Python 2.4 and 2.5
+
+    :copyright: 2010-2011 by Andrew Garner
+    :license: BSD, PSF see LICENSE.rst for details
+"""
 
 from operator import itemgetter as _itemgetter
 from keyword import iskeyword as _iskeyword
 import sys as _sys
 
 def all(iterable):
+    """all(iterable) -> bool
+
+    Return True if bool(x) is True for all values x in the iterable.
+    """
     for element in iterable:
         if not element:
             return False
