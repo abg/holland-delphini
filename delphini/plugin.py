@@ -4,19 +4,32 @@ import os
 import logging
 from holland.core.exceptions import BackupError
 from delphini.spec import CONFIGSPEC
-from delphini.util import backup, ClusterError
+from delphini.backend import backup
+from delphini.error import ClusterError
 
 LOG = logging.getLogger(__name__)
 
 def stream_factory(base_path, method, level):
+    """Provide a simple open(path, mode) method that always
+    opens a file relative to some base_path and passes through
+    the holland compression api.
+    """
+    # Hide the holland details from the delphini backend
     from holland.lib.compression import open_stream
 
     def stream_open(path, mode, level=level):
+        """Open a holland stream
+
+        :param level: level may be overridden by the backend if it needs
+                      to generate uncompressed files.
+        """
         real_path = os.path.join(base_path, path)
         return open_stream(real_path, mode, method, level)
     return stream_open
 
 class DelphiniPlugin(object):
+    """MySQL Cluster Backup Plugin implementation for Holland"""
+
     def __init__(self, name, config, target_directory, dry_run=False):
         config.validate_config(self.configspec())
         self.name = name
@@ -25,10 +38,12 @@ class DelphiniPlugin(object):
         self.dry_run = dry_run
 
     def estimate_backup_size(self):
+        """Estimate the backup size"""
         # XXX: implement I_S querying or ssh du -sh perhaps
         return 0
 
     def backup(self):
+        """Run a MySQL cluster backup"""
         config = self.config['mysql-cluster']
         dsn = config['connect-string']
         ssh_user = config['default-ssh-user']
@@ -41,8 +56,12 @@ class DelphiniPlugin(object):
         except ClusterError, exc:
             raise BackupError(exc)
 
-    def configspec(self):
+    @classmethod
+    def configspec(cls):
+        """Provide the config specification for the delphini plugin"""
         return CONFIGSPEC
 
-    def info(self):
+    @staticmethod
+    def info():
+        """Provide additional info about this backup"""
         return ""

@@ -4,18 +4,10 @@ import os
 import re
 import logging
 from subprocess import Popen, PIPE, list2cmdline
+from delphini.error import ClusterError, ClusterCommandError
 from delphini.pycompat import namedtuple
 
 LOG = logging.getLogger(__name__)
-
-class ClusterError(Exception):
-    """Raised when an error is encountered while backing up a MySQL Cluster"""
-
-class ClusterCommandError(ClusterError):
-    def __init__(self, message, status):
-        ClusterError.__init__(self, message)
-        self.message = message
-        self.status = status
 
 def run_command(args, stdout=PIPE, stderr=PIPE):
     """Run a command and returns its stdout, stderr and exit status
@@ -43,16 +35,16 @@ def run_command(args, stdout=PIPE, stderr=PIPE):
     stdout, stderr = process.communicate()
 
     if stderr is not None:
-        for line in stderr.splitlines():
+        for line in str(stderr).splitlines():
             LOG.info(" ! %s", line)
 
     if stdout is not None:
-        for line in stdout.splitlines():
+        for line in str(stdout).splitlines():
             LOG.info(" > %s", line)
 
     return  stdout, stderr, process.returncode
 
-def ssh(hostname, command, keyfile=None, ssh='ssh', **kwargs):
+def ssh(hostname, command, keyfile=None, ssh_bin='ssh', **kwargs):
     """SSH to the specified host and run a command
 
     :param hostname: host to connect to with ssh
@@ -66,7 +58,7 @@ def ssh(hostname, command, keyfile=None, ssh='ssh', **kwargs):
     :returns: stdout (str or None), stderr (str or None)
     """
     args = [
-        ssh,
+        ssh_bin,
         '-o', 'BatchMode=yes',
         hostname,
         command
@@ -102,7 +94,7 @@ def query_ndb(dsn, query, query_type='ndbd', ndb_config='ndb_config'):
     :returns: dict of hostname -> namedtuple
     """
     query = ['hostname'] + list(query)
-    stdout, stderr, status = run_command([
+    stdout, _, status = run_command([
         ndb_config,
         '--connect-string=%s' % dsn,
         '--type=%s' % query_type,
@@ -111,22 +103,38 @@ def query_ndb(dsn, query, query_type='ndbd', ndb_config='ndb_config'):
         '--rows=\\n'
     ])
 
-    Query = namedtuple('Query', ' '.join(query))
+    query_ntuple = namedtuple('Query', ' '.join(query))
     if status != 0:
         raise ClusterCommandError("ndb_config exited with non-zero status %d" %
                                   status,
                                   status=status)
 
     nodes = {}
-    for line in stdout.splitlines():
+    for line in str(stdout).splitlines():
         row = line.split(':')
         hostname = row[0]
-        nodes[hostname] = Query(*row)
+        nodes[hostname] = query_ntuple(*row)
     return nodes
 
 
 def run_cluster_backup(dsn):
-    stdout, stderr, status = run_command(['ndb_mgm', '-c', dsn, '-e', 'START BACKUP WAIT COMPLETED'])
+    """Run a MySQL Cluster backup and wait until it completes
+
+    This method will raise ClusterCommandError if ndb_mgm exits
+    with non-zero status.
+
+    :param dsn: connect-string for ndb_mgm
+
+    :returns: backup_id (int), stop_gcp (int)
+    """
+    args = [
+        'ndb_mgm',
+        '-c',
+        dsn,
+        '-e',
+        'START BACKUP WAIT COMPLETED'
+    ]
+    stdout, _, status = run_command(args)
 
     if status != 0:
         raise ClusterCommandError("ndb_mgm -e 'START BACKUP' exited with "
@@ -154,86 +162,17 @@ def parse_backup_id(stdout):
 
     :returns: backup_id (int)
     """
-    m = re.search(r'Backup (?P<backup_id>\d+)', stdout, re.M)
-    if not m:
+    match = re.search(r'Backup (?P<backup_id>\d+)', stdout, re.M)
+    if not match:
         raise ClusterError("No backup id found in output")
-    return int(m.group('backup_id'))
+    return int(match.group('backup_id'))
 
 def parse_stop_gcp(stdout):
-    m = re.search(r'StopGCP: (?P<stop_gcp>[0-9]+)', stdout, re.M)
-    if not m:
+    """Parse StopGCP from START BACKUP output"""
+    match = re.search(r'StopGCP: (?P<stop_gcp>[0-9]+)', stdout, re.M)
+    if not match:
         raise ClusterError("No StopGCP found in output")
-    return int(m.group('stop_gcp'))
-
-def archive_data_nodes(dsn,
-                       backup_id,
-                       ssh_user,
-                       keyfile,
-                       open_file=open):
-    """Archive the backups specified by ``backup_id`` on the data nodes
-
-    :param dsn: connection string to use to query the data nodes involved
-    :param backup_id: backup_id of of the backup to archive on each node
-    :param ssh_user: ssh user to use when archiving data
-    :param keyfile: ssh keyfile to use for authentication
-
-    :raises: ClusterError on failure
-    """
-    nodes = query_ndb(dsn, query=['nodegroup', 'nodeid', 'backupdatadir'])
-    results = []
-    for node in nodes:
-        query = nodes[node]
-        host = '%s@%s' % (ssh_user, node)
-        remote_path = os.path.join(query.backupdatadir,
-                                   'BACKUP',
-                                   'BACKUP-%d' % backup_id)
-        try:
-            stdout, stderr = ssh(host,
-                                 'ls -lah ' + list2cmdline([remote_path]),
-                                 keyfile=keyfile)
-        except ClusterCommandError, exc:
-            if exc.status != 255:
-                LOG.error("Error when checking Backup path. "
-                          "Skipping backups for node %d", query.nodeid)
-                continue
-            # status == 255 errors are probably fatal
-            raise
-
-        # XXX: compression for tar command
-        ssh(host,
-            'tar -cf - -C %s .' % list2cmdline([remote_path]),
-            keyfile=keyfile,
-            stdout=open_file("backup_%s_%d.tar" % (node, backup_id), 'w')
-        )
-        LOG.info("Archived node %s with backup id %d", node, backup_id)
-        results.append(query)
-
-    groups = set([query.nodegroup for query in nodes.values()])
-    # verify node groups
-    for node in results:
-        if node.nodegroup in groups:
-            groups.remove(node.nodegroup)
-    if groups:
-        for group in groups:
-            LOG.error("Node group %s does not have backup coverage", group)
-        raise ClusterError("Failed to backup one or more node groups")
-
-    if len(nodes) != len(results):
-        LOG.warning("One or more nodes appears to be down but all node "
-                    "groups had a successful backup")
-
-def purge_backup(dsn, backup_id, ssh_user, keyfile):
-    """Purge backups for a particular backup-id"""
-    nodes = query_ndb(dsn, query=['backupdatadir'])
-    for node in nodes:
-        query = nodes[node]
-        host = '%s@%s' % (ssh_user, node)
-        remote_path = os.path.join(query.backupdatadir,
-                                   'BACKUP',
-                                   'BACKUP-%d' % backup_id)
-        ssh(host,
-            'rm -fr %s' % list2cmdline([remote_path]),
-            keyfile=keyfile)
+    return int(match.group('stop_gcp'))
 
 def log_stop_gcp(fileobj, stop_gcp):
     """Log the StopGCP value from START BACKUP to a file
@@ -242,15 +181,3 @@ def log_stop_gcp(fileobj, stop_gcp):
     fileobj.write("stop_gcp = %s" % stop_gcp)
     fileobj.write(os.linesep)
     fileobj.close()
-
-def backup(dsn, ssh_user, ssh_keyfile, open_file):
-    """Backup a MySQL cluster"""
-    backup_id, stop_gcp = run_cluster_backup(dsn=dsn)
-    archive_data_nodes(dsn=dsn,
-                       backup_id=backup_id,
-                       ssh_user=ssh_user,
-                       keyfile=ssh_keyfile,
-                       open_file=open_file)
-    log_stop_gcp(open_file('replication.info', 'w', level=0), stop_gcp)
-    purge_backup(dsn, backup_id, ssh_user, ssh_keyfile)
-    return backup_id, stop_gcp
