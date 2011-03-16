@@ -12,7 +12,11 @@
 
 import os
 import logging
-from holland.core.exceptions import BackupError
+try:
+    from holland.core.exceptions import BackupError
+except ImportError:
+    # be nice to sphinx
+    BackupError = Exception
 from delphini.spec import CONFIGSPEC
 from delphini.backend import backup
 from delphini.error import ClusterError
