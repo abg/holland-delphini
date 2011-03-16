@@ -251,6 +251,6 @@ def backup(dsn, ssh_user, ssh_keyfile, open_file):
                        ssh_user=ssh_user,
                        keyfile=ssh_keyfile,
                        open_file=open_file)
-    log_stop_gcp(open_file('replication.info', 'w'))
+    log_stop_gcp(open_file('replication.info', 'w', level=0), stop_gcp)
     purge_backup(dsn, backup_id, ssh_user, ssh_keyfile)
     return backup_id, stop_gcp

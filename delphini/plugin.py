@@ -11,7 +11,7 @@ LOG = logging.getLogger(__name__)
 def stream_factory(base_path, method, level):
     from holland.lib.compression import open_stream
 
-    def stream_open(path, mode):
+    def stream_open(path, mode, level=level):
         real_path = os.path.join(base_path, path)
         return open_stream(real_path, mode, method, level)
     return stream_open
