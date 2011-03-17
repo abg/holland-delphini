@@ -23,24 +23,6 @@ from delphini.error import ClusterError
 
 LOG = logging.getLogger(__name__)
 
-def stream_factory(base_path, method, level):
-    """Provide a simple open(path, mode) method that always
-    opens a file relative to some base_path and passes through
-    the holland compression api.
-    """
-    # Hide the holland details from the delphini backend
-    from holland.lib.compression import open_stream
-
-    def stream_open(path, mode, level=level):
-        """Open a holland stream
-
-        :param level: level may be overridden by the backend if it needs
-                      to generate uncompressed files.
-        """
-        real_path = os.path.join(base_path, path)
-        return open_stream(real_path, mode, method, level)
-    return stream_open
-
 class DelphiniPlugin(object):
     """MySQL Cluster Backup Plugin implementation for Holland"""
 
@@ -62,11 +44,9 @@ class DelphiniPlugin(object):
         dsn = config['connect-string']
         ssh_user = config['default-ssh-user']
         ssh_keyfile = config['default-ssh-keyfile']
-        stream_open = stream_factory(self.target_directory,
-                                     self.config['compression']['method'],
-                                     self.config['compression']['level'])
+
         try:
-            backup(dsn, ssh_user, ssh_keyfile, stream_open)
+            backup(dsn, ssh_user, ssh_keyfile, self.target_directory)
         except ClusterError, exc:
             raise BackupError(exc)
 

@@ -54,6 +54,18 @@ def run_command(args, stdout=PIPE, stderr=PIPE):
 
     return  stdout, stderr, process.returncode
 
+def rsync(host, keyfile, remote_path, local_path):
+    args = [
+        'rsync',
+        '-avz',
+        '-e', 'ssh -o BatchMode=yes',
+        host + ':' + remote_path,
+        local_path
+    ]
+    if keyfile is not None:
+        args[3] += ' -i ' + keyfile
+    run_command(args)
+
 def ssh(hostname, command, keyfile=None, ssh_bin='ssh', **kwargs):
     """SSH to the specified host and run a command
 
@@ -183,11 +195,3 @@ def parse_stop_gcp(stdout):
     if not match:
         raise ClusterError("No StopGCP found in output")
     return int(match.group('stop_gcp'))
-
-def log_stop_gcp(fileobj, stop_gcp):
-    """Log the StopGCP value from START BACKUP to a file
-    in the backup directory
-    """
-    fileobj.write("stop_gcp = %s" % stop_gcp)
-    fileobj.write(os.linesep)
-    fileobj.close()

@@ -11,8 +11,8 @@
 
 import os
 import logging
-from delphini.util import ssh, log_stop_gcp, query_ndb, run_cluster_backup, \
-                          list2cmdline
+from subprocess import list2cmdline
+from delphini.util import ssh, rsync, query_ndb, run_cluster_backup
 from delphini.error import ClusterError, ClusterCommandError
 
 LOG = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ def archive_data_nodes(dsn,
                        backup_id,
                        ssh_user,
                        keyfile,
-                       open_file=open):
+                       target_path):
     """Archive the backups specified by ``backup_id`` on the data nodes
 
     :param dsn: connection string to use to query the data nodes involved
@@ -51,11 +51,7 @@ def archive_data_nodes(dsn,
             # status == 255 errors are probably fatal
             raise
 
-        ssh(host,
-            'tar -cf - -C %s .' % list2cmdline([remote_path]),
-            keyfile=keyfile,
-            stdout=open_file("backup_%s_%d.tar" % (node, backup_id), 'w')
-        )
+        rsync(host, keyfile, list2cmdline([remote_path]), target_path)
         LOG.info("Archived node %s with backup id %d", node, backup_id)
         results.append(query)
 
@@ -86,14 +82,20 @@ def purge_backup(dsn, backup_id, ssh_user, keyfile):
             'rm -fr %s' % list2cmdline([remote_path]),
             keyfile=keyfile)
 
-def backup(dsn, ssh_user, ssh_keyfile, open_file):
+def backup(dsn, ssh_user, ssh_keyfile, target_path):
     """Backup a MySQL cluster"""
     backup_id, stop_gcp = run_cluster_backup(dsn=dsn)
     archive_data_nodes(dsn=dsn,
                        backup_id=backup_id,
                        ssh_user=ssh_user,
                        keyfile=ssh_keyfile,
-                       open_file=open_file)
-    log_stop_gcp(open_file('replication.info', 'w', level=0), stop_gcp)
+                       target_path=target_path)
+    try:
+        cluster_info = open(os.path.join(target_path, 'cluster.info'), 'w')
+        cluster_info.write(stop_gcp)
+        cluster_info.close()
+    except IOError, exc:
+        LOG.error("Failed to write cluster.info: %s", exc)
+
     purge_backup(dsn, backup_id, ssh_user, ssh_keyfile)
     return backup_id, stop_gcp
