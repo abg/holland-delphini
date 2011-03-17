@@ -11,6 +11,7 @@
 """
 
 import os
+import glob
 import logging
 try:
     from holland.core.exceptions import BackupError
@@ -19,6 +20,7 @@ except ImportError:
     BackupError = Exception
 from delphini.spec import CONFIGSPEC
 from delphini.backend import backup
+from delphini.util import run_command
 from delphini.error import ClusterError
 
 LOG = logging.getLogger(__name__)
@@ -46,9 +48,29 @@ class DelphiniPlugin(object):
         ssh_keyfile = config['default-ssh-keyfile']
 
         try:
-            backup(dsn, ssh_user, ssh_keyfile, self.target_directory)
+            backup_id, stop_gcp = backup(dsn,
+                                         ssh_user,
+                                         ssh_keyfile,
+                                         self.target_directory)
         except ClusterError, exc:
             raise BackupError(exc)
+
+        compression = self.config['compression']['method']
+
+        if compression != 'none':
+            path = os.path.join(self.target_directory,
+                                'BACKUP-%d' % backup_id,
+                                '*')
+            args = [
+                compression,
+                '-v',
+                '-%d' % self.config['compression']['level'],
+            ]
+            if compression == 'lzop':
+                # ensure lzop removes the old files once they're compressed
+                args.insert(1, '--delete')
+            for path in glob.glob(path):
+                run_command(args + [path])
 
     @classmethod
     def configspec(cls):

@@ -92,7 +92,7 @@ def backup(dsn, ssh_user, ssh_keyfile, target_path):
                        target_path=target_path)
     try:
         cluster_info = open(os.path.join(target_path, 'cluster.info'), 'w')
-        cluster_info.write(stop_gcp)
+        cluster_info.write('StopGCP = %s' % stop_gcp)
         cluster_info.close()
     except IOError, exc:
         LOG.error("Failed to write cluster.info: %s", exc)
