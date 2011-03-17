@@ -59,7 +59,7 @@ configurable compression support.  Holland 1.0 currently supports several
 compression methods:
 
   * gzip and pigz (parallel gzip)
-  * bzip2 and pbzip2 (parallel bzip2)
+  * bzip2
   * lzop
   * lzma/xz
 
