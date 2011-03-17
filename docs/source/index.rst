@@ -6,7 +6,7 @@ User Documentation
 .. toctree::
    :maxdepth: 2
 
-   backups.rst
+   user
 
 Developer Documentation
 -----------------------
