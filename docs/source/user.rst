@@ -99,6 +99,106 @@ server the ``default-ssh-user`` will also need access to delete files under the
 ``BackupDataDir``.  If ndbd is started as the system root user then this will
 mean that ``default-ssh-user`` will also need to be root.
 
+Example Setup and Execution
+===========================
+
+This is an example setup with a management node at ip 10.4.6.13 and data nodes
+at 10.4.6.11 and 10.4.6.12.  This shows the basic flow of a cluster backup.
+
+::
+
+  $ cat > /etc/holland/backupsets/mysql-cluster.conf <<EOF
+  [holland:backup]
+  plugin = mysql-cluster
+  backups-to-keep = 1
+  auto-purge-failures = yes
+  purge-policy = after-backup
+  
+  [mysql-cluster]
+  connect-string = 10.4.6.13
+  default-ssh-user = root
+  default-ssh-keyfile = /etc/holland/holland.pkey
+  
+  [compression]
+  method = gzip
+  level = 6
+  EOF
+
+  $ holland backup mysql-cluster
+  Holland 1.0.6 started with pid 11807
+  --- Starting backup run ---
+  Acquired lock /etc/holland/backupsets/mysql-cluster.conf : '/etc/holland/backupsets/mysql-cluster.conf'
+  Creating backup path /var/spool/holland/mysql-cluster/20110316_223610
+  Estimated Backup Size: 0.00B
+  Starting backup[mysql-cluster/20110316_223610] via plugin mysql-cluster
+   + ndb_mgm -c 10.4.6.13 -e "START BACKUP WAIT COMPLETED"
+   > Connected to Management Server at: 10.4.6.13:1186
+   > Waiting for completed, this may take several minutes
+   > Node 3: Backup 142 started from node 1
+   > Node 3: Backup 142 started from node 1 completed
+   >  StartGCP: 89098 StopGCP: 89101
+   >  #Records: 2092802 #LogRecords: 0
+   >  Data: 33502780 bytes Log: 0 bytes
+   + ndb_config --connect-string=10.4.6.13 --type=ndbd --query=hostname,nodegroup,nodeid,backupdatadir --fields=: --rows=\n
+   > 10.4.6.11:0:2:/var/lib/mysql backups
+   > 10.4.6.12:0:3:/var/lib/mysql-cluster
+   + ssh -o BatchMode=yes -i /etc/holland/holland.pkey root@10.4.6.12 "ls -lah /var/lib/mysql-cluster/BACKUP/BACKUP-142"
+   > total 17M
+   > drwxr-x---  2 root root 4.0K Mar 16 22:36 .
+   > drwxr-x--- 67 root root 4.0K Mar 16 22:36 ..
+   > -rw-rw-rw-  1 root root  16M Mar 16 22:36 BACKUP-142-0.3.Data
+   > -rw-rw-rw-  1 root root 9.3K Mar 16 22:36 BACKUP-142.3.ctl
+   > -rw-rw-rw-  1 root root   52 Mar 16 22:36 BACKUP-142.3.log
+   + rsync -avz -e "ssh -o BatchMode=yes -i /etc/holland/holland.pkey" root@10.4.6.12:/var/lib/mysql-cluster/BACKUP/BACKUP-142 /var/spool/holland/mysql-cluster/20110316_223610
+   > receiving file list ... done
+   > BACKUP-142/
+   > BACKUP-142/BACKUP-142-0.3.Data
+   > BACKUP-142/BACKUP-142.3.ctl
+   > BACKUP-142/BACKUP-142.3.log
+   > 
+   > sent 92 bytes  received 1861628 bytes  1241146.67 bytes/sec
+   > total size is 16751276  speedup is 9.00
+  Archived node 10.4.6.12 with backup id 142
+   + ssh -o BatchMode=yes -i /etc/holland/holland.pkey root@10.4.6.11 "ls -lah \"/var/lib/mysql backups/BACKUP/BACKUP-142\""
+   > total 17M
+   > drwxr-x---  2 root root 4.0K Mar 16 22:36 .
+   > drwxr-x--- 62 root root 4.0K Mar 16 22:36 ..
+   > -rw-r--r--  1 root root  16M Mar 16 22:36 BACKUP-142-0.2.Data
+   > -rw-r--r--  1 root root 9.3K Mar 16 22:36 BACKUP-142.2.ctl
+   > -rw-r--r--  1 root root   52 Mar 16 22:36 BACKUP-142.2.log
+   + rsync -avz -e "ssh -o BatchMode=yes -i /etc/holland/holland.pkey" "root@10.4.6.11:\"/var/lib/mysql backups/BACKUP/BACKUP-142\"" /var/spool/holland/mysql-cluster/20110316_223610
+   > receiving file list ... done
+   > BACKUP-142/BACKUP-142-0.2.Data
+   > BACKUP-142/BACKUP-142.2.ctl
+   > BACKUP-142/BACKUP-142.2.log
+   > 
+   > sent 86 bytes  received 1861875 bytes  1241307.33 bytes/sec
+   > total size is 16771024  speedup is 9.01
+  Archived node 10.4.6.11 with backup id 142
+   + ndb_config --connect-string=10.4.6.13 --type=ndbd --query=hostname,backupdatadir --fields=: --rows=\n
+   > 10.4.6.11:/var/lib/mysql backups
+   > 10.4.6.12:/var/lib/mysql-cluster
+   + ssh -o BatchMode=yes -i /etc/holland/holland.pkey root@10.4.6.12 "rm -fr /var/lib/mysql-cluster/BACKUP/BACKUP-142"
+   + ssh -o BatchMode=yes -i /etc/holland/holland.pkey root@10.4.6.11 "rm -fr \"/var/lib/mysql backups/BACKUP/BACKUP-142\""
+   + gzip -v -6 /var/spool/holland/mysql-cluster/20110316_223610/BACKUP-142/BACKUP-142-0.3.Data
+   ! /var/spool/holland/mysql-cluster/20110316_223610/BACKUP-142/BACKUP-142-0.3.Data:      88.8% -- replaced with /var/spool/holland/mysql-cluster/20110316_223610/BACKUP-142/BACKUP-142-0.3.Data.gz
+   + gzip -v -6 /var/spool/holland/mysql-cluster/20110316_223610/BACKUP-142/BACKUP-142.2.ctl
+   ! /var/spool/holland/mysql-cluster/20110316_223610/BACKUP-142/BACKUP-142.2.ctl:         76.0% -- replaced with /var/spool/holland/mysql-cluster/20110316_223610/BACKUP-142/BACKUP-142.2.ctl.gz
+   + gzip -v -6 /var/spool/holland/mysql-cluster/20110316_223610/BACKUP-142/BACKUP-142-0.2.Data
+   ! /var/spool/holland/mysql-cluster/20110316_223610/BACKUP-142/BACKUP-142-0.2.Data:      88.8% -- replaced with /var/spool/holland/mysql-cluster/20110316_223610/BACKUP-142/BACKUP-142-0.2.Data.gz
+   + gzip -v -6 /var/spool/holland/mysql-cluster/20110316_223610/BACKUP-142/BACKUP-142.3.log
+   ! /var/spool/holland/mysql-cluster/20110316_223610/BACKUP-142/BACKUP-142.3.log:         23.1% -- replaced with /var/spool/holland/mysql-cluster/20110316_223610/BACKUP-142/BACKUP-142.3.log.gz
+   + gzip -v -6 /var/spool/holland/mysql-cluster/20110316_223610/BACKUP-142/BACKUP-142.2.log
+   ! /var/spool/holland/mysql-cluster/20110316_223610/BACKUP-142/BACKUP-142.2.log:         23.1% -- replaced with /var/spool/holland/mysql-cluster/20110316_223610/BACKUP-142/BACKUP-142.2.log.gz
+   + gzip -v -6 /var/spool/holland/mysql-cluster/20110316_223610/BACKUP-142/BACKUP-142.3.ctl
+   ! /var/spool/holland/mysql-cluster/20110316_223610/BACKUP-142/BACKUP-142.3.ctl:         76.0% -- replaced with /var/spool/holland/mysql-cluster/20110316_223610/BACKUP-142/BACKUP-142.3.ctl.gz
+  Final on-disk backup size 3.59MB
+  Backup completed in 8.30 seconds
+  Purged mysql-cluster/20110316_222007
+  1 backups purged
+  Released lock /etc/holland/backupsets/mysql-cluster.conf
+  --- Ending backup run ---
+  
 Reporting Bugs
 ==============
 
