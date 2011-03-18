@@ -46,14 +46,36 @@ class DelphiniPlugin(object):
         dsn = config['connect-string']
         ssh_user = config['default-ssh-user']
         ssh_keyfile = config['default-ssh-keyfile']
+        target_path = os.path.join(self.target_directory, 'data')
+        try:
+            os.mkdir(target_path)
+        except OSError, exc:
+            raise BackupError("Failed to create %s: %s", (target_path, exc))
 
         try:
             backup_id, stop_gcp = backup(dsn,
                                          ssh_user,
                                          ssh_keyfile,
-                                         self.target_directory)
+                                         target_path)
         except ClusterError, exc:
             raise BackupError(exc)
+
+        cluster_info = os.path.join(self.target_directory,
+                                    'cluster_backup.info')
+        try:
+            fileobj = open(cluster_info, 'w')
+        except IOError, exc:
+            raise BackupError("Failed to create %s: %s", (cluster_info, exc))
+
+        try:
+            try:
+                fileobj.write("stopgcp = %s\n" % stop_gcp)
+                fileobj.write("backupid = %s\n" % backup_id)
+            except IOError, exc:
+                raise BackupError("Failed to write %s: %s",
+                                  (cluster_info, exc))
+        finally:
+            fileobj.close()
 
         compression = self.config['compression']['method']
 

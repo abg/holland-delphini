@@ -59,7 +59,7 @@ def rsync(host, keyfile, remote_path, local_path):
         'rsync',
         '-avz',
         '-e', 'ssh -o BatchMode=yes',
-        host + ':' + remote_path,
+        host + ':' + remote_path + '/',
         local_path
     ]
     if keyfile is not None:
