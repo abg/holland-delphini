@@ -42,7 +42,7 @@ basic parameters for the cluster backups.
 TODO
 ====
 
-  * Make the archival method configuration instead of hardcoding tar
+  * Make the archival method configurable instead of hardcoding rsync
   * Allow sudo execution of commands on remote server (probably
     by just making those command invocations configurable) - this
     will lift the restriction on direct ssh access to BackupDataDir
