@@ -55,6 +55,15 @@ def run_command(args, stdout=PIPE, stderr=PIPE):
     return  stdout, stderr, process.returncode
 
 def rsync(host, keyfile, remote_path, local_path):
+    """Rsync a remote directory to a local directory
+
+    This method will always rsync over ssh
+
+    :param host: hostname to rsync from
+    :param keyfile: ssh private key to use for auth
+    :param remote_path: remote path to rsync from
+    :param local_path: local path to rsync to
+    """
     args = [
         'rsync',
         '-avz',
